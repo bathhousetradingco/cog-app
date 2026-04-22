@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bathhouse COGS</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23172f2a'/%3E%3Ctext x='50' y='62' text-anchor='middle' font-size='42' font-family='Arial' fill='%23f6d66f'%3EBT%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+<script src="assets/config.js"></script>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+
+<body>
+<main class="appShell">
+  <header class="pageHeader">
+    <div>
+      <div class="kicker">Bathhouse Trading Company</div>
+      <h1>COGS Workspace</h1>
+    </div>
+    <div id="sessionBadge" class="sessionBadge">Not connected</div>
+  </header>
+
+  <section id="setupPanel" class="panel setupPanel" style="display:none;">
+    <h2>Supabase project needed</h2>
+    <p>
+      Add the new COGS Supabase URL and anon key in <code>assets/config.js</code>,
+      then refresh this page.
+    </p>
+  </section>
+
+  <section id="authPanel" class="panel authPanel">
+    <h2>Login</h2>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="email">
+    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+    <button id="loginBtn" class="primaryBtn" type="button">Login</button>
+  </section>
+
+  <section id="app" style="display:none;">
+    <div class="toolbar panel">
+      <div class="searchWrap">
+        <label for="globalSearch">Search ingredients, packaging, formulas</label>
+        <input type="search" id="globalSearch" placeholder="Search shea, jar, bath bomb, lip balm...">
+      </div>
+      <div class="toolbarActions">
+        <label class="fileBtn">
+          Import Excel
+          <input type="file" id="workbookFile" accept=".xlsx,.xls" hidden>
+        </label>
+        <button id="exportJsonBtn" class="darkBtn" type="button">Export JSON</button>
+        <button id="logoutBtn" class="mutedBtn" type="button">Logout</button>
+      </div>
+    </div>
+
+    <div id="importStatus" class="statusBanner" style="display:none;"></div>
+
+    <div class="appGrid">
+      <aside class="panel sidePanel">
+        <div class="sectionTitle">Catalog</div>
+        <button id="showItemsBtn" class="navPill active" type="button">Cost items</button>
+        <button id="showFormulasBtn" class="navPill" type="button">Formulas</button>
+        <div id="categoryList" class="categoryList"></div>
+      </aside>
+
+      <section class="panel listPanel">
+        <div class="panelHeader">
+          <div>
+            <div id="listEyebrow" class="kicker">Cost Items</div>
+            <h2 id="listTitle">All Categories</h2>
+          </div>
+          <div id="recordCount" class="recordCount">0 records</div>
+        </div>
+        <div id="recordList" class="recordList"></div>
+      </section>
+
+      <section class="panel detailPanel">
+        <div id="detailContent" class="emptyState">
+          Select a cost item or formula.
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<div id="modalOverlay" class="modalOverlay" style="display:none;">
+  <div class="modalBox">
+    <div class="modalHeader">
+      <h2 id="modalTitle"></h2>
+      <button id="modalCloseBtn" class="mutedBtn" type="button">Close</button>
+    </div>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
