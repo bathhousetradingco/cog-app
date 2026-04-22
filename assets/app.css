@@ -1,24 +1,28 @@
 :root {
-  --bg: #f3f6fb;
+  --bg: #f4f5f7;
   --panel: #ffffff;
-  --panel-alt: #f9fbff;
-  --ink: #172033;
-  --soft: #55627a;
-  --border: #dce3ef;
-  --green: #216d5f;
-  --green-dark: #172f2a;
-  --blue: #1565c0;
+  --panel-alt: #f8faf9;
+  --ink: #161b24;
+  --soft: #5c6677;
+  --muted: #818a9a;
+  --border: #d9dee7;
+  --border-strong: #bcc5d2;
+  --green: #1e6b5d;
+  --green-dark: #17362f;
+  --navy: #172033;
+  --blue: #245fa8;
   --red: #b42318;
   --amber: #9a5b00;
-  --shadow: 0 10px 30px rgba(23, 32, 51, 0.08);
-  --radius: 16px;
+  --gold: #d7ad3f;
+  --shadow: 0 8px 22px rgba(22, 27, 36, 0.08);
+  --radius: 8px;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: linear-gradient(180deg, #eef3ff 0%, var(--bg) 220px);
+  background: var(--bg);
   color: var(--ink);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -35,23 +39,36 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
 code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding: 2px 5px;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #eef2f7;
 }
 
 .appShell {
-  width: min(100%, 1180px);
+  width: min(100%, 1440px);
   margin: 0 auto;
   padding: 16px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
 
 .pageHeader,
 .panelHeader,
 .toolbar,
-.modalHeader {
+.modalHeader,
+.splitHeader,
+.rowActions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -59,11 +76,13 @@ code {
 }
 
 .pageHeader {
-  margin: 8px 0 16px;
+  margin: 8px 0 14px;
 }
 
 .kicker,
-.sectionTitle {
+.sectionTitle,
+.fieldLabel,
+.tableLabel {
   color: var(--soft);
   font-size: 12px;
   font-weight: 800;
@@ -80,23 +99,32 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: clamp(30px, 6vw, 54px);
+  font-size: clamp(32px, 5vw, 56px);
   line-height: 1;
 }
 
 h2 {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+h3 {
+  margin-bottom: 8px;
+  font-size: 17px;
 }
 
 .sessionBadge,
 .recordCount,
-.statusPill {
+.statusPill,
+.tag,
+.deltaPill {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
+  min-height: 28px;
   width: max-content;
   max-width: 100%;
-  padding: 0 10px;
+  padding: 0 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: #fff;
@@ -124,10 +152,10 @@ input,
 select,
 textarea {
   width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
+  min-height: 42px;
+  padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: #fff;
   color: var(--ink);
   font-size: 16px;
@@ -146,15 +174,17 @@ textarea {
 .darkBtn,
 .mutedBtn,
 .fileBtn,
-.dangerBtn {
+.dangerBtn,
+.smallBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
-  padding: 0 14px;
-  border-radius: 12px;
+  min-height: 40px;
+  padding: 0 13px;
+  border-radius: var(--radius);
   font-weight: 800;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .primaryBtn {
@@ -165,11 +195,12 @@ textarea {
 
 .darkBtn,
 .fileBtn {
-  background: #111827;
+  background: var(--navy);
   color: #fff;
 }
 
-.mutedBtn {
+.mutedBtn,
+.smallBtn {
   border: 1px solid var(--border);
   background: #fff;
   color: var(--ink);
@@ -180,17 +211,51 @@ textarea {
   color: #fff;
 }
 
+.smallBtn {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.moduleTabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.moduleTab {
+  min-height: 42px;
+  padding: 0 12px;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--soft);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.moduleTab.active {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.toolbar {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
 .searchWrap {
-  flex: 1 1 360px;
+  flex: 1 1 420px;
 }
 
 .searchWrap label {
   display: block;
   margin-bottom: 6px;
-  color: var(--soft);
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
 }
 
 .toolbarActions {
@@ -204,7 +269,7 @@ textarea {
   margin-bottom: 12px;
   padding: 12px 14px;
   border: 1px solid #f0d08a;
-  border-radius: 14px;
+  border-radius: var(--radius);
   background: #fff8e6;
   color: #5c3900;
   font-weight: 700;
@@ -216,114 +281,217 @@ textarea {
   color: #8a1c12;
 }
 
-.appGrid {
+.workspace {
   display: grid;
-  grid-template-columns: 240px minmax(320px, 1fr) minmax(320px, 0.95fr);
+  gap: 12px;
+}
+
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metricCard,
+.groupCard,
+.formulaCard,
+.issueCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.metricCard {
+  min-height: 120px;
+  padding: 13px;
+}
+
+.metricCard strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.metricCard span:last-child {
+  display: block;
+  margin-top: 8px;
+  color: var(--soft);
+  font-size: 13px;
+}
+
+.workbookMap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.groupGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.groupCard {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  padding: 11px;
+  text-align: left;
+}
+
+.groupCard:hover,
+.groupCard.active,
+.dataRow:hover,
+.dataRow.active,
+.formulaCard:hover,
+.formulaCard.active,
+.issueCard:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-alt);
+}
+
+.groupCard strong,
+.formulaCard strong,
+.issueCard strong {
+  overflow-wrap: anywhere;
+}
+
+.groupCard span,
+.formulaCard span,
+.issueCard span {
+  color: var(--soft);
+  font-size: 13px;
+}
+
+.twoColumn {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(340px, 0.72fr);
   gap: 12px;
   align-items: start;
 }
 
-.sidePanel {
+.libraryLayout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.sideRail {
   position: sticky;
   top: 12px;
 }
 
-.navPill {
-  width: 100%;
-  min-height: 40px;
-  margin-top: 8px;
-  border-radius: 12px;
-  background: #eef2f7;
-  color: var(--ink);
-  font-weight: 800;
-}
-
-.navPill.active {
-  background: var(--green-dark);
-  color: #fff;
-}
-
-.categoryList {
+.filterList {
   display: grid;
   gap: 6px;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
-.categoryBtn {
+.filterBtn {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
   min-height: 38px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--ink);
   text-align: left;
 }
 
-.categoryBtn.active,
-.categoryBtn:hover {
-  background: var(--panel-alt);
+.filterBtn.active,
+.filterBtn:hover {
+  background: #edf2ef;
 }
 
-.categoryBtn span:last-child {
+.dataTableWrap {
+  overflow-x: auto;
+}
+
+.dataTable {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.dataTable th,
+.dataTable td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #edf1f7;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.dataTable th {
   color: var(--soft);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
-.recordList {
+.dataRow {
+  cursor: pointer;
+}
+
+.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.formulaGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.formulaCard {
   display: grid;
   gap: 8px;
-  margin-top: 14px;
-  max-height: calc(100vh - 250px);
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.recordCard {
-  display: grid;
-  gap: 4px;
-  width: 100%;
+  min-height: 150px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fff;
   text-align: left;
 }
 
-.recordCard:hover,
-.recordCard.active {
-  border-color: #a5b4fc;
+.formulaMetrics,
+.inlineMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.miniMetric {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   background: var(--panel-alt);
 }
 
-.recordTitle {
-  font-weight: 900;
+.miniMetric span {
+  display: block;
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
-.recordMeta,
-.muted,
-.small {
-  color: var(--soft);
-  font-size: 13px;
+.miniMetric strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
 }
 
 .detailPanel {
+  position: sticky;
+  top: 12px;
   min-height: 420px;
-}
-
-.emptyState {
-  display: grid;
-  min-height: 220px;
-  place-items: center;
-  color: var(--soft);
-  text-align: center;
 }
 
 .detailGrid {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .fieldGrid {
@@ -336,36 +504,19 @@ textarea {
 .fullField {
   display: grid;
   gap: 6px;
-  color: var(--soft);
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
 }
 
-.metricGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin: 12px 0;
-}
-
-.metricBox {
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--panel-alt);
-}
-
-.metricBox strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 20px;
+  margin-top: 10px;
 }
 
 .lineTable {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .lineTable th,
@@ -382,28 +533,59 @@ textarea {
   text-transform: uppercase;
 }
 
-.affectedList {
+.affectedList,
+.issueList,
+.recentList {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin-top: 10px;
 }
 
-.affectedItem {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 9px 10px;
+.affectedItem,
+.issueCard,
+.recentItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel-alt);
+  border-radius: var(--radius);
+  background: #fff;
+  text-align: left;
+}
+
+.deltaPill.good {
+  border-color: #b7dacb;
+  color: #14523f;
+}
+
+.deltaPill.warn {
+  border-color: #f1d192;
+  color: #704000;
+}
+
+.deltaPill.bad {
+  border-color: #f1b4ad;
+  color: #8a1c12;
+}
+
+.emptyState {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  color: var(--soft);
+  text-align: center;
+}
+
+.muted,
+.small {
+  color: var(--soft);
   font-size: 13px;
 }
 
-.buttonRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+.small {
+  line-height: 1.35;
 }
 
 .modalOverlay {
@@ -421,7 +603,7 @@ textarea {
   width: min(100%, 860px);
   max-height: 88vh;
   overflow: auto;
-  border-radius: 18px;
+  border-radius: var(--radius);
   background: #fff;
   padding: 16px;
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.25);
@@ -439,20 +621,24 @@ textarea {
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
 }
 
-@media (max-width: 1040px) {
-  .appGrid {
+@media (max-width: 1180px) {
+  .dashboardGrid,
+  .formulaGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .twoColumn,
+  .workbookMap,
+  .libraryLayout {
     grid-template-columns: 1fr;
   }
 
-  .sidePanel {
+  .sideRail,
+  .detailPanel {
     position: static;
-  }
-
-  .recordList {
-    max-height: none;
   }
 }
 
@@ -460,7 +646,8 @@ textarea {
   .pageHeader,
   .panelHeader,
   .toolbar,
-  .modalHeader {
+  .modalHeader,
+  .splitHeader {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -474,8 +661,18 @@ textarea {
     width: 100%;
   }
 
+  .dashboardGrid,
+  .formulaGrid,
+  .groupGrid,
   .fieldGrid,
-  .metricGrid {
+  .formulaMetrics,
+  .inlineMetrics {
+    grid-template-columns: 1fr;
+  }
+
+  .affectedItem,
+  .issueCard,
+  .recentItem {
     grid-template-columns: 1fr;
   }
 }

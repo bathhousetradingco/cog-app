@@ -37,9 +37,17 @@
   </section>
 
   <section id="app" style="display:none;">
-    <div class="toolbar panel">
+    <nav class="moduleTabs" aria-label="COGS modules">
+      <button class="moduleTab active" type="button" data-view="dashboard">Dashboard</button>
+      <button class="moduleTab" type="button" data-view="costs">Cost Library</button>
+      <button class="moduleTab" type="button" data-view="formulas">Formula Book</button>
+      <button class="moduleTab" type="button" data-view="updates">Price Updates</button>
+      <button class="moduleTab" type="button" data-view="exceptions">Exceptions</button>
+    </nav>
+
+    <div class="toolbar">
       <div class="searchWrap">
-        <label for="globalSearch">Search ingredients, packaging, formulas</label>
+        <label for="globalSearch">Search workbook</label>
         <input type="search" id="globalSearch" placeholder="Search shea, jar, bath bomb, lip balm...">
       </div>
       <div class="toolbarActions">
@@ -53,32 +61,7 @@
     </div>
 
     <div id="importStatus" class="statusBanner" style="display:none;"></div>
-
-    <div class="appGrid">
-      <aside class="panel sidePanel">
-        <div class="sectionTitle">Catalog</div>
-        <button id="showItemsBtn" class="navPill active" type="button">Cost items</button>
-        <button id="showFormulasBtn" class="navPill" type="button">Formulas</button>
-        <div id="categoryList" class="categoryList"></div>
-      </aside>
-
-      <section class="panel listPanel">
-        <div class="panelHeader">
-          <div>
-            <div id="listEyebrow" class="kicker">Cost Items</div>
-            <h2 id="listTitle">All Categories</h2>
-          </div>
-          <div id="recordCount" class="recordCount">0 records</div>
-        </div>
-        <div id="recordList" class="recordList"></div>
-      </section>
-
-      <section class="panel detailPanel">
-        <div id="detailContent" class="emptyState">
-          Select a cost item or formula.
-        </div>
-      </section>
-    </div>
+    <section id="workspace" class="workspace"></section>
   </section>
 </main>
 

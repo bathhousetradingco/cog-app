@@ -19,14 +19,8 @@ const els = {
   workbookFile: document.getElementById("workbookFile"),
   exportJsonBtn: document.getElementById("exportJsonBtn"),
   importStatus: document.getElementById("importStatus"),
-  showItemsBtn: document.getElementById("showItemsBtn"),
-  showFormulasBtn: document.getElementById("showFormulasBtn"),
-  categoryList: document.getElementById("categoryList"),
-  recordList: document.getElementById("recordList"),
-  recordCount: document.getElementById("recordCount"),
-  listEyebrow: document.getElementById("listEyebrow"),
-  listTitle: document.getElementById("listTitle"),
-  detailContent: document.getElementById("detailContent"),
+  workspace: document.getElementById("workspace"),
+  moduleTabs: document.querySelectorAll(".moduleTab"),
   modalOverlay: document.getElementById("modalOverlay"),
   modalTitle: document.getElementById("modalTitle"),
   modalContent: document.getElementById("modalContent"),
@@ -75,9 +69,10 @@ const FORMULA_GROUPS = [
 
 const state = {
   user: null,
-  view: "items",
+  view: "dashboard",
   query: "",
-  activeCategory: "",
+  activeCostGroup: "",
+  activeFormulaGroup: "",
   selectedItemId: "",
   selectedFormulaId: "",
   categories: [],
@@ -113,6 +108,15 @@ function number(value, digits = 4) {
   return amount.toFixed(digits).replace(/\.?0+$/, "");
 }
 
+function whole(value) {
+  return new Intl.NumberFormat("en-US").format(Number(value) || 0);
+}
+
+function dateShort(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(value));
+}
+
 function toNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const cleaned = String(value).replace(/[$,]/g, "").trim();
@@ -124,7 +128,7 @@ function normalizeUnit(unit) {
   const value = String(unit || "").toLowerCase().trim();
   if (["g", "gm", "gram", "grams"].includes(value)) return "g";
   if (["oz", "ounce", "ounces"].includes(value)) return "oz";
-  if (["each", "ea", "unit", "units", "tube", "jar", "bottle", "bag"].includes(value)) return "unit";
+  if (["each", "ea", "unit", "units", "tube", "jar", "bottle", "bag", "box", "set"].includes(value)) return "unit";
   return value || "unit";
 }
 
@@ -147,8 +151,47 @@ function splitCellRef(ref) {
   return match ? { col: match[1], colIndex: colToNumber(match[1]), row: Number(match[2]) } : null;
 }
 
+function sourceCellList(group) {
+  return [group[1], group[2], group[3], group[4]].filter(Boolean).join(", ");
+}
+
+function formulaRefs(expression) {
+  return Array.from(new Set(String(expression || "").match(/\b[A-Z]{1,3}\d+\b/g) || []));
+}
+
 function getCategoryName(id) {
   return state.categories.find((category) => category.id === id)?.name || "Uncategorized";
+}
+
+function itemGroupName(item) {
+  return getCategoryName(item.category_id);
+}
+
+function getItemCosts(item, overrides = {}) {
+  const override = overrides.items?.[item.id] || {};
+  return {
+    cost_per_oz: override.cost_per_oz ?? item.cost_per_oz,
+    cost_per_gram: override.cost_per_gram ?? item.cost_per_gram,
+    cost_per_unit: override.cost_per_unit ?? item.cost_per_unit
+  };
+}
+
+function hasCost(item) {
+  const costs = getItemCosts(item);
+  return [costs.cost_per_oz, costs.cost_per_gram, costs.cost_per_unit].some((value) => Number(value) > 0);
+}
+
+function bestCostLabel(item) {
+  const costs = getItemCosts(item);
+  if (Number(costs.cost_per_unit) > 0) return `${money(costs.cost_per_unit)} / unit`;
+  if (Number(costs.cost_per_gram) > 0) return `${money(costs.cost_per_gram)} / g`;
+  if (Number(costs.cost_per_oz) > 0) return `${money(costs.cost_per_oz)} / oz`;
+  return "Missing";
+}
+
+function matchesQuery(value) {
+  if (!state.query) return true;
+  return String(value || "").toLowerCase().includes(state.query.toLowerCase());
 }
 
 function showStatus(message, type = "info") {
@@ -228,175 +271,719 @@ async function loadWorkspace() {
   state.lines = lines.data || [];
   state.cells = cells.data || [];
   state.priceHistory = history.data || [];
+
+  if (!state.selectedItemId && state.items[0]) state.selectedItemId = state.items[0].id;
+  if (!state.selectedFormulaId && state.formulas[0]) state.selectedFormulaId = state.formulas[0].id;
   render();
 }
 
 function render() {
-  renderCategories();
-  renderRecordList();
-  renderDetail();
-}
-
-function renderCategories() {
-  const records = state.view === "items" ? state.items : state.formulas;
-  const counts = new Map();
-
-  for (const record of records) {
-    const category = state.view === "items" ? getCategoryName(record.category_id) : record.category || "Uncategorized";
-    counts.set(category, (counts.get(category) || 0) + 1);
-  }
-
-  const categories = Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  els.categoryList.innerHTML = `
-    <button class="categoryBtn ${state.activeCategory ? "" : "active"}" type="button" data-category="">
-      <strong>All</strong><span>${records.length}</span>
-    </button>
-    ${categories.map(([name, count]) => `
-      <button class="categoryBtn ${state.activeCategory === name ? "active" : ""}" type="button" data-category="${escapeHtml(name)}">
-        <strong>${escapeHtml(name)}</strong><span>${count}</span>
-      </button>
-    `).join("")}
-  `;
-
-  els.categoryList.querySelectorAll(".categoryBtn").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.activeCategory = button.dataset.category || "";
-      render();
-    });
+  els.moduleTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === state.view);
   });
+
+  if (state.view === "dashboard") renderDashboard();
+  if (state.view === "costs") renderCostLibrary();
+  if (state.view === "formulas") renderFormulaBook();
+  if (state.view === "updates") renderPriceUpdates();
+  if (state.view === "exceptions") renderExceptions();
+  bindDynamicControls();
 }
 
-function filteredItems() {
-  const query = state.query.toLowerCase();
-  return state.items.filter((item) => {
-    const category = getCategoryName(item.category_id);
-    const haystack = `${item.name} ${category} ${item.supplier || ""} ${item.notes || ""}`.toLowerCase();
-    return (!state.activeCategory || category === state.activeCategory) && (!query || haystack.includes(query));
-  });
+function dashboardStats() {
+  const issues = getIssues();
+  const missingCosts = state.items.filter((item) => !hasCost(item));
+  const formulaTotals = state.formulas.map((formula) => formulaBreakdown(formula));
+  const costTotal = formulaTotals.reduce((sum, formula) => sum + formula.total, 0);
+  const formulasWithDiff = formulaTotals.filter((formula) => Math.abs(formula.delta) > 0.01);
+
+  return {
+    issues,
+    missingCosts,
+    formulaTotals,
+    costTotal,
+    formulasWithDiff
+  };
 }
 
-function filteredFormulas() {
-  const query = state.query.toLowerCase();
-  return state.formulas.filter((formula) => {
-    const haystack = `${formula.name} ${formula.category || ""} ${formula.label || ""} ${formula.notes || ""}`.toLowerCase();
-    return (!state.activeCategory || formula.category === state.activeCategory) && (!query || haystack.includes(query));
-  });
-}
+function renderDashboard() {
+  const stats = dashboardStats();
+  const topFormulas = [...stats.formulaTotals]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+  const issuePreview = stats.issues.slice(0, 6);
 
-function renderRecordList() {
-  els.showItemsBtn.classList.toggle("active", state.view === "items");
-  els.showFormulasBtn.classList.toggle("active", state.view === "formulas");
-  els.listEyebrow.textContent = state.view === "items" ? "Cost Items" : "Formulas";
-  els.listTitle.textContent = state.activeCategory || "All Categories";
+  els.workspace.innerHTML = `
+    <section class="dashboardGrid">
+      <div class="metricCard">
+        <span class="kicker">Cost items</span>
+        <strong>${whole(state.items.length)}</strong>
+        <span>${whole(state.categories.length)} workbook groups</span>
+      </div>
+      <div class="metricCard">
+        <span class="kicker">Formulas</span>
+        <strong>${whole(state.formulas.length)}</strong>
+        <span>${whole(state.lines.length)} parsed formula refs</span>
+      </div>
+      <div class="metricCard">
+        <span class="kicker">Needs attention</span>
+        <strong>${whole(stats.issues.length)}</strong>
+        <span>${whole(stats.missingCosts.length)} missing material costs</span>
+      </div>
+      <div class="metricCard">
+        <span class="kicker">Formula COGS total</span>
+        <strong>${money(stats.costTotal)}</strong>
+        <span>${whole(stats.formulasWithDiff.length)} differ from workbook values</span>
+      </div>
+    </section>
 
-  if (state.view === "items") {
-    const items = filteredItems();
-    els.recordCount.textContent = `${items.length} records`;
-    els.recordList.innerHTML = items.map((item) => `
-      <button class="recordCard ${state.selectedItemId === item.id ? "active" : ""}" type="button" data-id="${item.id}">
-        <span class="recordTitle">${escapeHtml(item.name)}</span>
-        <span class="recordMeta">${escapeHtml(getCategoryName(item.category_id))}</span>
-        <span class="recordMeta">oz ${money(item.cost_per_oz)} / g ${money(item.cost_per_gram)} / unit ${money(item.cost_per_unit)}</span>
-      </button>
-    `).join("") || `<div class="emptyState">No cost items found.</div>`;
-  } else {
-    const formulas = filteredFormulas();
-    els.recordCount.textContent = `${formulas.length} records`;
-    els.recordList.innerHTML = formulas.map((formula) => {
-      const value = evaluateFormula(formula);
-      return `
-        <button class="recordCard ${state.selectedFormulaId === formula.id ? "active" : ""}" type="button" data-id="${formula.id}">
-          <span class="recordTitle">${escapeHtml(formula.name)}</span>
-          <span class="recordMeta">${escapeHtml(formula.category || "Formula")}${formula.label ? ` - ${escapeHtml(formula.label)}` : ""}</span>
-          <span class="recordMeta">Calculated ${money(value)}</span>
-        </button>
-      `;
-    }).join("") || `<div class="emptyState">No formulas found.</div>`;
-  }
+    <section class="workbookMap">
+      <div class="panel">
+        <div class="panelHeader">
+          <div>
+            <div class="kicker">Spreadsheet cost columns</div>
+            <h2>Cost Library</h2>
+          </div>
+          <button class="smallBtn" type="button" data-action="go-view" data-view="costs">Open</button>
+        </div>
+        <div class="groupGrid">
+          ${COST_GROUPS.map((group) => groupCardHtml({
+            name: group[0],
+            meta: `${sourceCellList(group)} columns`,
+            count: state.items.filter((item) => itemGroupName(item) === group[0]).length,
+            action: "pick-cost-group",
+            attr: "data-cost-group",
+            value: group[0]
+          })).join("")}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panelHeader">
+          <div>
+            <div class="kicker">Spreadsheet formula columns</div>
+            <h2>Formula Book</h2>
+          </div>
+          <button class="smallBtn" type="button" data-action="go-view" data-view="formulas">Open</button>
+        </div>
+        <div class="groupGrid">
+          ${FORMULA_GROUPS.map((group) => groupCardHtml({
+            name: group.name,
+            meta: `${group.col}+ formula block`,
+            count: state.formulas.filter((formula) => formula.category === group.name).length,
+            action: "pick-formula-group",
+            attr: "data-formula-group",
+            value: group.name
+          })).join("")}
+        </div>
+      </div>
+    </section>
 
-  els.recordList.querySelectorAll(".recordCard").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (state.view === "items") {
-        state.selectedItemId = button.dataset.id;
-        state.selectedFormulaId = "";
-      } else {
-        state.selectedFormulaId = button.dataset.id;
-        state.selectedItemId = "";
-      }
-      renderDetail();
-      renderRecordList();
-    });
-  });
-}
-
-function renderDetail() {
-  if (state.selectedItemId) {
-    const item = state.items.find((record) => record.id === state.selectedItemId);
-    if (item) return renderItemDetail(item);
-  }
-  if (state.selectedFormulaId) {
-    const formula = state.formulas.find((record) => record.id === state.selectedFormulaId);
-    if (formula) return renderFormulaDetail(formula);
-  }
-  els.detailContent.className = "emptyState";
-  els.detailContent.innerHTML = "Select a cost item or formula.";
-}
-
-function renderItemDetail(item) {
-  const affected = formulasAffectedByItem(item);
-  els.detailContent.className = "detailGrid";
-  els.detailContent.innerHTML = `
-    <div>
-      <div class="kicker">${escapeHtml(getCategoryName(item.category_id))}</div>
-      <h2>${escapeHtml(item.name)}</h2>
-      <div class="small">${escapeHtml(item.source_name_cell || "Manual item")}</div>
-    </div>
-
-    <div class="metricGrid">
-      <div class="metricBox"><span class="small">Cost / oz</span><strong>${money(item.cost_per_oz)}</strong></div>
-      <div class="metricBox"><span class="small">Cost / gram</span><strong>${money(item.cost_per_gram)}</strong></div>
-      <div class="metricBox"><span class="small">Cost / unit</span><strong>${money(item.cost_per_unit)}</strong></div>
-    </div>
-
-    <div class="fieldGrid">
-      <label>Purchase price<input id="itemPurchasePrice" type="number" step="0.0001" value="${number(item.purchase_price)}"></label>
-      <label>Purchase quantity<input id="itemPurchaseQty" type="number" step="0.0001" value="${number(item.purchase_quantity)}"></label>
-      <label>Purchase unit<input id="itemPurchaseUnit" value="${escapeHtml(item.purchase_unit || "")}"></label>
-      <label>Supplier<input id="itemSupplier" value="${escapeHtml(item.supplier || "")}"></label>
-      <label>Cost per oz<input id="itemCostOz" type="number" step="0.0001" value="${number(item.cost_per_oz)}"></label>
-      <label>Cost per gram<input id="itemCostGram" type="number" step="0.0001" value="${number(item.cost_per_gram)}"></label>
-      <label>Cost per unit<input id="itemCostUnit" type="number" step="0.0001" value="${number(item.cost_per_unit)}"></label>
-    </div>
-    <label class="fullField">Notes<textarea id="itemNotes">${escapeHtml(item.notes || "")}</textarea></label>
-
-    <div class="buttonRow">
-      <button id="saveItemBtn" class="primaryBtn" type="button">Save price update</button>
-      <button id="recalcFromPurchaseBtn" class="mutedBtn" type="button">Calculate from purchase</button>
-    </div>
-
-    <section>
-      <h3>Affected formulas</h3>
-      <div class="affectedList">
-        ${affected.length ? affected.map((formula) => `
-          <button class="affectedItem" type="button" data-formula-id="${formula.id}">
-            <span>${escapeHtml(formula.name)}</span>
-            <strong>${money(evaluateFormula(formula))}</strong>
-          </button>
-        `).join("") : `<div class="small">No formula references this item yet.</div>`}
+    <section class="twoColumn">
+      <div class="panel">
+        <div class="panelHeader">
+          <div>
+            <div class="kicker">Highest calculated COGS</div>
+            <h2>Formula Watchlist</h2>
+          </div>
+        </div>
+        <div class="recentList">
+          ${topFormulas.map(({ formula, total, lines, unresolved }) => `
+            <button class="recentItem" type="button" data-action="select-formula" data-formula-id="${formula.id}" data-target-view="formulas">
+              <span>
+                <strong>${escapeHtml(formula.name)}</strong>
+                <span class="small">${escapeHtml(formula.category)} · ${lines.length} refs${unresolved ? ` · ${unresolved} unresolved` : ""}</span>
+              </span>
+              <strong>${money(total)}</strong>
+            </button>
+          `).join("") || `<div class="emptyState">No formulas imported yet.</div>`}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panelHeader">
+          <div>
+            <div class="kicker">Cost integrity</div>
+            <h2>Exceptions</h2>
+          </div>
+          <button class="smallBtn" type="button" data-action="go-view" data-view="exceptions">Review</button>
+        </div>
+        <div class="issueList">
+          ${issuePreview.map(issueCardHtml).join("") || `<div class="emptyState">No exceptions detected.</div>`}
+        </div>
       </div>
     </section>
   `;
+}
 
-  document.getElementById("saveItemBtn").addEventListener("click", () => saveItem(item));
-  document.getElementById("recalcFromPurchaseBtn").addEventListener("click", recalcItemFromPurchase);
-  els.detailContent.querySelectorAll("[data-formula-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.view = "formulas";
-      state.selectedFormulaId = button.dataset.formulaId;
-      state.selectedItemId = "";
-      render();
+function groupCardHtml({ name, meta, count, action, attr, value }) {
+  return `
+    <button class="groupCard" type="button" data-action="${action}" ${attr}="${escapeHtml(value)}">
+      <strong>${escapeHtml(name)}</strong>
+      <span>${escapeHtml(meta)}</span>
+      <span class="tag">${whole(count)} records</span>
+    </button>
+  `;
+}
+
+function renderCostLibrary() {
+  const items = filteredItems();
+  const selected = items.find((item) => item.id === state.selectedItemId) || items[0] || null;
+  if (selected && state.selectedItemId !== selected.id) state.selectedItemId = selected.id;
+
+  els.workspace.innerHTML = `
+    <section class="libraryLayout">
+      <aside class="panel sideRail">
+        <div class="sectionTitle">Workbook cost groups</div>
+        <div class="filterList">
+          <button class="filterBtn ${state.activeCostGroup ? "" : "active"}" type="button" data-action="set-cost-group" data-cost-group="">
+            <strong>All</strong><span>${state.items.length}</span>
+          </button>
+          ${COST_GROUPS.map((group) => {
+            const count = state.items.filter((item) => itemGroupName(item) === group[0]).length;
+            return `
+              <button class="filterBtn ${state.activeCostGroup === group[0] ? "active" : ""}" type="button" data-action="set-cost-group" data-cost-group="${escapeHtml(group[0])}">
+                <strong>${escapeHtml(group[0])}</strong><span>${count}</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </aside>
+
+      <div class="twoColumn">
+        <section class="panel">
+          <div class="panelHeader">
+            <div>
+              <div class="kicker">Materials, packaging, and components</div>
+              <h2>${escapeHtml(state.activeCostGroup || "All Cost Groups")}</h2>
+            </div>
+            <div class="recordCount">${items.length} records</div>
+          </div>
+          <div class="dataTableWrap">
+            <table class="dataTable">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Group</th>
+                  <th class="numeric">Cost / oz</th>
+                  <th class="numeric">Cost / g</th>
+                  <th class="numeric">Cost / unit</th>
+                  <th>Sheet cells</th>
+                  <th class="numeric">Formulas</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map(itemRowHtml).join("") || `<tr><td colspan="7" class="emptyState">No matching cost items.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel detailPanel">
+          ${selected ? itemDetailHtml(selected, "library") : `<div class="emptyState">Select a cost item.</div>`}
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function filteredItems() {
+  return [...state.items]
+    .filter((item) => {
+      const group = itemGroupName(item);
+      const haystack = `${item.name} ${group} ${item.supplier || ""} ${item.notes || ""}`;
+      return (!state.activeCostGroup || group === state.activeCostGroup) && matchesQuery(haystack);
+    })
+    .sort((a, b) => {
+      const groupA = COST_GROUPS.findIndex((group) => group[0] === itemGroupName(a));
+      const groupB = COST_GROUPS.findIndex((group) => group[0] === itemGroupName(b));
+      return (groupA - groupB) || a.name.localeCompare(b.name);
     });
+}
+
+function itemRowHtml(item) {
+  const sourceCells = Object.values(item.source_cells || {}).filter(Boolean).join(", ");
+  return `
+    <tr class="dataRow ${state.selectedItemId === item.id ? "active" : ""}" data-action="select-item" data-item-id="${item.id}">
+      <td><strong>${escapeHtml(item.name)}</strong><div class="small">${escapeHtml(item.supplier || "")}</div></td>
+      <td>${escapeHtml(itemGroupName(item))}</td>
+      <td class="numeric">${money(item.cost_per_oz)}</td>
+      <td class="numeric">${money(item.cost_per_gram)}</td>
+      <td class="numeric">${money(item.cost_per_unit)}</td>
+      <td><span class="small">${escapeHtml(sourceCells || item.source_name_cell || "-")}</span></td>
+      <td class="numeric">${formulasAffectedByItem(item).length}</td>
+    </tr>
+  `;
+}
+
+function itemDetailHtml(item, context = "updates") {
+  const affected = formulasAffectedByItem(item);
+  return `
+    <div class="detailGrid">
+      <div>
+        <div class="kicker">${escapeHtml(itemGroupName(item))}</div>
+        <h2>${escapeHtml(item.name)}</h2>
+        <div class="small">${escapeHtml(item.source_name_cell || "Manual item")} · ${escapeHtml(Object.values(item.source_cells || {}).filter(Boolean).join(", ") || "No linked cost cells")}</div>
+      </div>
+
+      <div class="inlineMetrics">
+        <div class="miniMetric"><span>Cost / oz</span><strong>${money(item.cost_per_oz)}</strong></div>
+        <div class="miniMetric"><span>Cost / g</span><strong>${money(item.cost_per_gram)}</strong></div>
+        <div class="miniMetric"><span>Cost / unit</span><strong>${money(item.cost_per_unit)}</strong></div>
+      </div>
+
+      <div class="fieldGrid">
+        <label><span class="fieldLabel">Purchase price</span><input id="itemPurchasePrice" type="number" step="0.0001" value="${number(item.purchase_price)}"></label>
+        <label><span class="fieldLabel">Purchase quantity</span><input id="itemPurchaseQty" type="number" step="0.0001" value="${number(item.purchase_quantity)}"></label>
+        <label><span class="fieldLabel">Purchase unit</span><input id="itemPurchaseUnit" value="${escapeHtml(item.purchase_unit || "")}"></label>
+        <label><span class="fieldLabel">Supplier</span><input id="itemSupplier" value="${escapeHtml(item.supplier || "")}"></label>
+        <label><span class="fieldLabel">Cost per oz</span><input id="itemCostOz" type="number" step="0.0001" value="${number(item.cost_per_oz)}"></label>
+        <label><span class="fieldLabel">Cost per gram</span><input id="itemCostGram" type="number" step="0.0001" value="${number(item.cost_per_gram)}"></label>
+        <label><span class="fieldLabel">Cost per unit</span><input id="itemCostUnit" type="number" step="0.0001" value="${number(item.cost_per_unit)}"></label>
+      </div>
+      <label class="fullField"><span class="fieldLabel">Notes</span><textarea id="itemNotes">${escapeHtml(item.notes || "")}</textarea></label>
+
+      <div class="buttonRow">
+        <button id="saveItemBtn" class="primaryBtn" type="button" data-action="save-item" data-item-id="${item.id}">Save price update</button>
+        <button id="recalcFromPurchaseBtn" class="mutedBtn" type="button" data-action="recalc-item">Calculate from purchase</button>
+      </div>
+
+      ${context === "updates" ? `<div id="impactPreview">${impactPreviewHtml(item, draftOverrideFromForm(item))}</div>` : affectedFormulaListHtml(item, affected)}
+    </div>
+  `;
+}
+
+function affectedFormulaListHtml(item, affected = formulasAffectedByItem(item)) {
+  return `
+    <section>
+      <div class="splitHeader">
+        <h3>Affected formulas</h3>
+        <span class="recordCount">${affected.length}</span>
+      </div>
+      <div class="affectedList">
+        ${affected.map((formula) => `
+          <button class="affectedItem" type="button" data-action="select-formula" data-formula-id="${formula.id}" data-target-view="formulas">
+            <span>
+              <strong>${escapeHtml(formula.name)}</strong>
+              <span class="small">${escapeHtml(formula.category || "")}</span>
+            </span>
+            <strong>${money(evaluateFormula(formula))}</strong>
+          </button>
+        `).join("") || `<div class="small">No formula references this item yet.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderFormulaBook() {
+  const formulas = filteredFormulas();
+  const selected = formulas.find((formula) => formula.id === state.selectedFormulaId) || formulas[0] || null;
+  if (selected && state.selectedFormulaId !== selected.id) state.selectedFormulaId = selected.id;
+
+  els.workspace.innerHTML = `
+    <section class="libraryLayout">
+      <aside class="panel sideRail">
+        <div class="sectionTitle">Workbook formula groups</div>
+        <div class="filterList">
+          <button class="filterBtn ${state.activeFormulaGroup ? "" : "active"}" type="button" data-action="set-formula-group" data-formula-group="">
+            <strong>All</strong><span>${state.formulas.length}</span>
+          </button>
+          ${FORMULA_GROUPS.map((group) => {
+            const count = state.formulas.filter((formula) => formula.category === group.name).length;
+            return `
+              <button class="filterBtn ${state.activeFormulaGroup === group.name ? "active" : ""}" type="button" data-action="set-formula-group" data-formula-group="${escapeHtml(group.name)}">
+                <strong>${escapeHtml(group.name)}</strong><span>${count}</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </aside>
+
+      <div class="twoColumn">
+        <section class="panel">
+          <div class="panelHeader">
+            <div>
+              <div class="kicker">Parsed workbook formulas</div>
+              <h2>${escapeHtml(state.activeFormulaGroup || "All Formula Groups")}</h2>
+            </div>
+            <div class="recordCount">${formulas.length} records</div>
+          </div>
+          <div class="formulaGrid">
+            ${formulas.map(formulaCardHtml).join("") || `<div class="emptyState">No matching formulas.</div>`}
+          </div>
+        </section>
+
+        <section class="panel detailPanel">
+          ${selected ? formulaDetailHtml(selected) : `<div class="emptyState">Select a formula.</div>`}
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function filteredFormulas() {
+  return [...state.formulas]
+    .filter((formula) => {
+      const haystack = `${formula.name} ${formula.category || ""} ${formula.label || ""} ${formula.notes || ""} ${formula.source_cell || ""}`;
+      return (!state.activeFormulaGroup || formula.category === state.activeFormulaGroup) && matchesQuery(haystack);
+    })
+    .sort((a, b) => {
+      const groupA = FORMULA_GROUPS.findIndex((group) => group.name === a.category);
+      const groupB = FORMULA_GROUPS.findIndex((group) => group.name === b.category);
+      return (groupA - groupB) || String(a.source_cell || "").localeCompare(String(b.source_cell || ""));
+    });
+}
+
+function formulaCardHtml(formula) {
+  const breakdown = formulaBreakdown(formula);
+  return `
+    <button class="formulaCard ${state.selectedFormulaId === formula.id ? "active" : ""}" type="button" data-action="select-formula" data-formula-id="${formula.id}">
+      <span class="tag">${escapeHtml(formula.source_cell || "")}</span>
+      <strong>${escapeHtml(formula.name)}</strong>
+      <span>${escapeHtml(formula.category || "Formula")}${formula.label ? ` · ${escapeHtml(formula.label)}` : ""}</span>
+      <div class="formulaMetrics">
+        <div class="miniMetric"><span>COGS</span><strong>${money(breakdown.total)}</strong></div>
+        <div class="miniMetric"><span>Refs</span><strong>${breakdown.lines.length}</strong></div>
+        <div class="miniMetric"><span>Delta</span><strong>${money(breakdown.delta)}</strong></div>
+      </div>
+    </button>
+  `;
+}
+
+function formulaDetailHtml(formula, overrides = {}) {
+  const breakdown = formulaBreakdown(formula, overrides);
+  const deltaClass = Math.abs(breakdown.delta) <= 0.01 ? "good" : "warn";
+  return `
+    <div class="detailGrid">
+      <div>
+        <div class="kicker">${escapeHtml(formula.category || "Formula")}</div>
+        <h2>${escapeHtml(formula.name)}</h2>
+        <div class="small">${escapeHtml(formula.source_cell || "")}${formula.label ? ` · ${escapeHtml(formula.label)}` : ""}</div>
+      </div>
+
+      <div class="inlineMetrics">
+        <div class="miniMetric"><span>Calculated COGS</span><strong>${money(breakdown.total)}</strong></div>
+        <div class="miniMetric"><span>Workbook value</span><strong>${money(formula.workbook_value)}</strong></div>
+        <div class="miniMetric"><span>Delta</span><strong><span class="deltaPill ${deltaClass}">${money(breakdown.delta)}</span></strong></div>
+      </div>
+
+      <div class="small"><code>=${escapeHtml(formula.formula_expression || "")}</code></div>
+      <div class="dataTableWrap">
+        <table class="lineTable">
+          <thead><tr><th>Ref</th><th>Component</th><th>Qty</th><th>Unit</th><th>Type</th><th class="numeric">Line cost</th></tr></thead>
+          <tbody>
+            ${breakdown.lines.map((line) => `
+              <tr>
+                <td>${escapeHtml(line.source_cell_ref || "")}</td>
+                <td>${line.item ? `<button class="smallBtn" type="button" data-action="select-item" data-item-id="${line.item.id}" data-target-view="costs">${escapeHtml(line.name)}</button>` : escapeHtml(line.name)}</td>
+                <td>${number(line.quantity, 3) || "-"}</td>
+                <td>${escapeHtml(line.unit || "")}</td>
+                <td>${escapeHtml(line.type)}</td>
+                <td class="numeric">${money(line.cost)}</td>
+              </tr>
+            `).join("") || `<tr><td colspan="6" class="small">No parsed line refs for this formula.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderPriceUpdates() {
+  const items = filteredItems()
+    .sort((a, b) => formulasAffectedByItem(b).length - formulasAffectedByItem(a).length);
+  const selected = state.items.find((item) => item.id === state.selectedItemId) || items[0];
+  if (selected && state.selectedItemId !== selected.id) state.selectedItemId = selected.id;
+
+  els.workspace.innerHTML = `
+    <section class="twoColumn">
+      <div class="panel">
+        <div class="panelHeader">
+          <div>
+            <div class="kicker">Price update workflow</div>
+            <h2>Pick an item and preview formula impact</h2>
+          </div>
+          <div class="recordCount">${items.length} records</div>
+        </div>
+        <div class="dataTableWrap">
+          <table class="dataTable">
+            <thead>
+              <tr><th>Item</th><th>Group</th><th>Current basis</th><th class="numeric">Affected</th><th>Updated</th></tr>
+            </thead>
+            <tbody>
+              ${items.map((item) => `
+                <tr class="dataRow ${state.selectedItemId === item.id ? "active" : ""}" data-action="select-item" data-item-id="${item.id}">
+                  <td><strong>${escapeHtml(item.name)}</strong><div class="small">${escapeHtml(item.supplier || "")}</div></td>
+                  <td>${escapeHtml(itemGroupName(item))}</td>
+                  <td>${escapeHtml(bestCostLabel(item))}</td>
+                  <td class="numeric">${formulasAffectedByItem(item).length}</td>
+                  <td>${dateShort(item.updated_at)}</td>
+                </tr>
+              `).join("") || `<tr><td colspan="5" class="emptyState">No matching cost items.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <section class="panel detailPanel">
+        ${selected ? itemDetailHtml(selected, "updates") : `<div class="emptyState">Select a cost item.</div>`}
+      </section>
+    </section>
+  `;
+}
+
+function renderExceptions() {
+  const issues = getIssues();
+  els.workspace.innerHTML = `
+    <section class="panel">
+      <div class="panelHeader">
+        <div>
+          <div class="kicker">Workbook integrity checks</div>
+          <h2>Exceptions</h2>
+        </div>
+        <div class="recordCount">${issues.length} records</div>
+      </div>
+      <div class="issueList">
+        ${issues.map(issueCardHtml).join("") || `<div class="emptyState">No exceptions detected.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function issueCardHtml(issue) {
+  return `
+    <button class="issueCard" type="button" data-action="${issue.action}" ${issue.itemId ? `data-item-id="${issue.itemId}"` : ""} ${issue.formulaId ? `data-formula-id="${issue.formulaId}"` : ""} data-target-view="${issue.targetView}">
+      <span>
+        <strong>${escapeHtml(issue.title)}</strong>
+        <span class="small">${escapeHtml(issue.detail)}</span>
+      </span>
+      <span class="deltaPill ${issue.severity}">${escapeHtml(issue.type)}</span>
+    </button>
+  `;
+}
+
+function getIssues() {
+  const issues = [];
+  for (const item of state.items) {
+    if (!hasCost(item)) {
+      issues.push({
+        type: "Missing cost",
+        severity: "bad",
+        title: item.name,
+        detail: `${itemGroupName(item)} has no cost per oz, gram, or unit.`,
+        action: "select-item",
+        targetView: "updates",
+        itemId: item.id
+      });
+    }
+  }
+
+  for (const formula of state.formulas) {
+    const breakdown = formulaBreakdown(formula);
+    if (breakdown.unresolved) {
+      issues.push({
+        type: "Unresolved ref",
+        severity: "bad",
+        title: formula.name,
+        detail: `${formula.category} has ${breakdown.unresolved} unresolved workbook reference${breakdown.unresolved === 1 ? "" : "s"}.`,
+        action: "select-formula",
+        targetView: "formulas",
+        formulaId: formula.id
+      });
+    }
+    if (Math.abs(breakdown.delta) > 0.01) {
+      issues.push({
+        type: "Workbook delta",
+        severity: "warn",
+        title: formula.name,
+        detail: `${formula.source_cell || "Formula"} calculates ${money(breakdown.total)} vs workbook ${money(formula.workbook_value)}.`,
+        action: "select-formula",
+        targetView: "formulas",
+        formulaId: formula.id
+      });
+    }
+    if (!breakdown.lines.length) {
+      issues.push({
+        type: "No refs",
+        severity: "warn",
+        title: formula.name,
+        detail: `${formula.source_cell || "Formula"} has a formula value but no parsed component lines.`,
+        action: "select-formula",
+        targetView: "formulas",
+        formulaId: formula.id
+      });
+    }
+  }
+
+  return issues.sort((a, b) => {
+    const score = { bad: 0, warn: 1, good: 2 };
+    return score[a.severity] - score[b.severity] || a.title.localeCompare(b.title);
   });
+}
+
+function formulaBreakdown(formula, overrides = {}) {
+  const lines = state.lines
+    .filter((line) => line.formula_id === formula.id)
+    .map((line) => lineBreakdown(line, overrides));
+  const total = evaluateFormula(formula, new Set(), overrides);
+  const workbookValue = Number(formula.workbook_value) || 0;
+  return {
+    formula,
+    lines,
+    total,
+    workbookValue,
+    delta: total - workbookValue,
+    unresolved: lines.filter((line) => line.type === "Unresolved").length
+  };
+}
+
+function lineBreakdown(line, overrides = {}) {
+  const item = line.cost_item_id ? state.items.find((record) => record.id === line.cost_item_id) : null;
+  const sourceFormula = state.formulas.find((record) => record.source_cell === line.source_cell_ref);
+  const sourceCell = state.cells.find((record) => record.ref === line.source_cell_ref);
+  const cost = item ? lineCost(line, item, overrides) : getCellValue(line.source_cell_ref, new Set(), overrides);
+
+  let type = "Workbook cell";
+  let name = line.source_item_name || line.source_cell_ref || "Workbook reference";
+  if (item) {
+    type = "Cost item";
+    name = item.name;
+  } else if (sourceFormula) {
+    type = "Formula";
+    name = sourceFormula.name;
+  } else if (!sourceCell) {
+    type = "Unresolved";
+    name = line.source_cell_ref || "Missing reference";
+  }
+
+  return {
+    ...line,
+    item,
+    name,
+    type,
+    cost
+  };
+}
+
+function formulasAffectedByItem(item) {
+  const sourceCells = new Set(Object.values(item.source_cells || {}).filter(Boolean));
+  const affectedIds = new Set(
+    state.lines
+      .filter((line) => line.cost_item_id === item.id || sourceCells.has(line.source_cell_ref))
+      .map((line) => line.formula_id)
+  );
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const affectedSourceCells = new Set(
+      state.formulas
+        .filter((formula) => affectedIds.has(formula.id) && formula.source_cell)
+        .map((formula) => formula.source_cell)
+    );
+    for (const formula of state.formulas) {
+      if (affectedIds.has(formula.id)) continue;
+      if (formulaRefs(formula.formula_expression).some((ref) => affectedSourceCells.has(ref))) {
+        affectedIds.add(formula.id);
+        changed = true;
+      }
+    }
+  }
+
+  return state.formulas.filter((formula) => affectedIds.has(formula.id));
+}
+
+function getCellValue(ref, stack = new Set(), overrides = {}) {
+  if (!ref) return 0;
+  const item = state.items.find((record) => {
+    const cells = record.source_cells || {};
+    return cells.oz === ref || cells.gram === ref || cells.unit === ref;
+  });
+  if (item) {
+    const costs = getItemCosts(item, overrides);
+    if (item.source_cells?.oz === ref) return Number(costs.cost_per_oz) || 0;
+    if (item.source_cells?.gram === ref) return Number(costs.cost_per_gram) || 0;
+    if (item.source_cells?.unit === ref) return Number(costs.cost_per_unit) || 0;
+  }
+
+  const formula = state.formulas.find((record) => record.source_cell === ref);
+  if (formula && !stack.has(ref)) {
+    stack.add(ref);
+    const value = evaluateFormula(formula, stack, overrides);
+    stack.delete(ref);
+    return value;
+  }
+
+  const cell = state.cells.find((record) => record.ref === ref);
+  return Number(cell?.numeric_value) || 0;
+}
+
+function evaluateFormula(formula, stack = new Set(), overrides = {}) {
+  if (!formula?.formula_expression) return Number(formula?.workbook_value) || 0;
+  const expression = formula.formula_expression.replace(/\b[A-Z]{1,3}\d+\b/g, (ref) => String(getCellValue(ref, stack, overrides)));
+  if (!/^[0-9+\-*/().\s]+$/.test(expression)) return Number(formula.workbook_value) || 0;
+  try {
+    return Number(Function(`"use strict"; return (${expression});`)()) || 0;
+  } catch {
+    return Number(formula.workbook_value) || 0;
+  }
+}
+
+function lineCost(line, item, overrides = {}) {
+  const quantity = Number(line.quantity) || 1;
+  const unit = normalizeUnit(line.unit);
+  const costs = getItemCosts(item, overrides);
+  if (unit === "g") return quantity * (Number(costs.cost_per_gram) || 0);
+  if (unit === "oz") return quantity * (Number(costs.cost_per_oz) || 0);
+  return quantity * (Number(costs.cost_per_unit) || 0);
+}
+
+function draftOverrideFromForm(item) {
+  if (!document.getElementById("itemCostOz")) return { items: {} };
+  return {
+    items: {
+      [item.id]: {
+        cost_per_oz: toNumber(document.getElementById("itemCostOz").value),
+        cost_per_gram: toNumber(document.getElementById("itemCostGram").value),
+        cost_per_unit: toNumber(document.getElementById("itemCostUnit").value)
+      }
+    }
+  };
+}
+
+function impactPreviewHtml(item, overrides) {
+  const affected = formulasAffectedByItem(item);
+  const rows = affected
+    .map((formula) => {
+      const before = evaluateFormula(formula);
+      const after = evaluateFormula(formula, new Set(), overrides);
+      return { formula, before, after, delta: after - before };
+    })
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+  return `
+    <section>
+      <div class="splitHeader">
+        <h3>Formula impact preview</h3>
+        <span class="recordCount">${rows.length}</span>
+      </div>
+      <div class="affectedList">
+        ${rows.map(({ formula, before, after, delta }) => `
+          <button class="affectedItem" type="button" data-action="select-formula" data-formula-id="${formula.id}" data-target-view="formulas">
+            <span>
+              <strong>${escapeHtml(formula.name)}</strong>
+              <span class="small">${money(before)} → ${money(after)}</span>
+            </span>
+            <span class="deltaPill ${Math.abs(delta) <= 0.0001 ? "good" : "warn"}">${money(delta)}</span>
+          </button>
+        `).join("") || `<div class="small">No formula references this item yet.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function updateImpactPreview() {
+  const item = state.items.find((record) => record.id === state.selectedItemId);
+  const target = document.getElementById("impactPreview");
+  if (!item || !target) return;
+  target.innerHTML = impactPreviewHtml(item, draftOverrideFromForm(item));
 }
 
 function recalcItemFromPurchase() {
@@ -409,10 +996,11 @@ function recalcItemFromPurchase() {
     document.getElementById("itemCostGram").value = number(price / qty / 28.3495);
   } else if (unit === "g") {
     document.getElementById("itemCostGram").value = number(price / qty);
-    document.getElementById("itemCostOz").value = number(price / qty * 28.3495);
+    document.getElementById("itemCostOz").value = number((price / qty) * 28.3495);
   } else {
     document.getElementById("itemCostUnit").value = number(price / qty);
   }
+  updateImpactPreview();
 }
 
 async function saveItem(item) {
@@ -445,100 +1033,9 @@ async function saveItem(item) {
     changed_by: state.user?.id || null
   });
 
-  showStatus(`${item.name} updated. Formula totals have been recalculated in the browser.`);
-  await loadWorkspace();
+  showStatus(`${item.name} updated. Affected formula totals were recalculated.`);
   state.selectedItemId = item.id;
-  renderDetail();
-}
-
-function renderFormulaDetail(formula) {
-  const lines = state.lines.filter((line) => line.formula_id === formula.id);
-  const calculated = evaluateFormula(formula);
-  els.detailContent.className = "detailGrid";
-  els.detailContent.innerHTML = `
-    <div>
-      <div class="kicker">${escapeHtml(formula.category || "Formula")}</div>
-      <h2>${escapeHtml(formula.name)}</h2>
-      <div class="small">${escapeHtml(formula.source_cell || "")}${formula.label ? ` - ${escapeHtml(formula.label)}` : ""}</div>
-    </div>
-    <div class="metricGrid">
-      <div class="metricBox"><span class="small">Calculated COGS</span><strong>${money(calculated)}</strong></div>
-      <div class="metricBox"><span class="small">Workbook value</span><strong>${money(formula.workbook_value)}</strong></div>
-      <div class="metricBox"><span class="small">Line refs</span><strong>${lines.length}</strong></div>
-    </div>
-    <div class="small"><code>=${escapeHtml(formula.formula_expression || "")}</code></div>
-    <table class="lineTable">
-      <thead><tr><th>Reference</th><th>Item</th><th>Qty</th><th>Unit</th><th>Line cost</th></tr></thead>
-      <tbody>
-        ${lines.map((line) => {
-          const item = line.cost_item_id ? state.items.find((record) => record.id === line.cost_item_id) : null;
-          const cost = item ? lineCost(line, item) : getCellValue(line.source_cell_ref);
-          return `
-            <tr>
-              <td>${escapeHtml(line.source_cell_ref || "")}</td>
-              <td>${escapeHtml(item?.name || line.source_item_name || "Workbook reference")}</td>
-              <td>${number(line.quantity, 3) || "-"}</td>
-              <td>${escapeHtml(line.unit || "")}</td>
-              <td>${money(cost)}</td>
-            </tr>
-          `;
-        }).join("") || `<tr><td colspan="5" class="small">No parsed line refs for this formula.</td></tr>`}
-      </tbody>
-    </table>
-  `;
-}
-
-function formulasAffectedByItem(item) {
-  const sourceCells = new Set(Object.values(item.source_cells || {}).filter(Boolean));
-  const directFormulaIds = new Set(
-    state.lines
-      .filter((line) => line.cost_item_id === item.id || sourceCells.has(line.source_cell_ref))
-      .map((line) => line.formula_id)
-  );
-  return state.formulas.filter((formula) => directFormulaIds.has(formula.id));
-}
-
-function getCellValue(ref, stack = new Set()) {
-  if (!ref) return 0;
-  const item = state.items.find((record) => {
-    const cells = record.source_cells || {};
-    return cells.oz === ref || cells.gram === ref || cells.unit === ref;
-  });
-  if (item) {
-    if (item.source_cells?.oz === ref) return Number(item.cost_per_oz) || 0;
-    if (item.source_cells?.gram === ref) return Number(item.cost_per_gram) || 0;
-    if (item.source_cells?.unit === ref) return Number(item.cost_per_unit) || 0;
-  }
-
-  const formula = state.formulas.find((record) => record.source_cell === ref);
-  if (formula && !stack.has(ref)) {
-    stack.add(ref);
-    const value = evaluateFormula(formula, stack);
-    stack.delete(ref);
-    return value;
-  }
-
-  const cell = state.cells.find((record) => record.ref === ref);
-  return Number(cell?.numeric_value) || 0;
-}
-
-function evaluateFormula(formula, stack = new Set()) {
-  if (!formula?.formula_expression) return Number(formula?.workbook_value) || 0;
-  const expression = formula.formula_expression.replace(/\b[A-Z]{1,3}\d+\b/g, (ref) => String(getCellValue(ref, stack)));
-  if (!/^[0-9+\-*/().\s]+$/.test(expression)) return Number(formula.workbook_value) || 0;
-  try {
-    return Number(Function(`"use strict"; return (${expression});`)()) || 0;
-  } catch {
-    return Number(formula.workbook_value) || 0;
-  }
-}
-
-function lineCost(line, item) {
-  const quantity = Number(line.quantity) || 1;
-  const unit = normalizeUnit(line.unit);
-  if (unit === "g") return quantity * (Number(item.cost_per_gram) || 0);
-  if (unit === "oz") return quantity * (Number(item.cost_per_oz) || 0);
-  return quantity * (Number(item.cost_per_unit) || 0);
+  await loadWorkspace();
 }
 
 async function handleWorkbookFile(event) {
@@ -730,10 +1227,11 @@ function openImportPreview(parsed) {
   els.modalTitle.textContent = "Import Workbook";
   els.modalContent.innerHTML = `
     <p class="muted">Sheet: ${escapeHtml(parsed.sheetName)}</p>
-    <div class="metricGrid">
-      <div class="metricBox"><span class="small">Cells</span><strong>${parsed.cells.length}</strong></div>
-      <div class="metricBox"><span class="small">Cost items</span><strong>${parsed.items.length}</strong></div>
-      <div class="metricBox"><span class="small">Formulas</span><strong>${parsed.formulas.length}</strong></div>
+    <div class="dashboardGrid">
+      <div class="metricCard"><span class="kicker">Cells</span><strong>${parsed.cells.length}</strong><span>Workbook values and formulas</span></div>
+      <div class="metricCard"><span class="kicker">Cost items</span><strong>${parsed.items.length}</strong><span>Raw materials, packaging, kits</span></div>
+      <div class="metricCard"><span class="kicker">Formulas</span><strong>${parsed.formulas.length}</strong><span>Formula cells from BT onward</span></div>
+      <div class="metricCard"><span class="kicker">Formula refs</span><strong>${parsed.formulas.reduce((sum, formula) => sum + formula.lines.length, 0)}</strong><span>Parsed component references</span></div>
     </div>
     <div class="previewList">
       ${parsed.items.slice(0, 8).map((item) => `
@@ -895,6 +1393,71 @@ function exportJson() {
   URL.revokeObjectURL(url);
 }
 
+function setView(view) {
+  state.view = view;
+  render();
+}
+
+function handleWorkspaceClick(event) {
+  const trigger = event.target.closest("[data-action]");
+  if (!trigger) return;
+  const action = trigger.dataset.action;
+
+  if (action === "go-view") {
+    setView(trigger.dataset.view);
+    return;
+  }
+  if (action === "pick-cost-group") {
+    state.activeCostGroup = trigger.dataset.costGroup || "";
+    setView("costs");
+    return;
+  }
+  if (action === "pick-formula-group") {
+    state.activeFormulaGroup = trigger.dataset.formulaGroup || "";
+    setView("formulas");
+    return;
+  }
+  if (action === "set-cost-group") {
+    state.activeCostGroup = trigger.dataset.costGroup || "";
+    render();
+    return;
+  }
+  if (action === "set-formula-group") {
+    state.activeFormulaGroup = trigger.dataset.formulaGroup || "";
+    render();
+    return;
+  }
+  if (action === "select-item") {
+    state.selectedItemId = trigger.dataset.itemId;
+    state.selectedFormulaId = "";
+    if (trigger.dataset.targetView) state.view = trigger.dataset.targetView;
+    render();
+    return;
+  }
+  if (action === "select-formula") {
+    state.selectedFormulaId = trigger.dataset.formulaId;
+    state.selectedItemId = "";
+    if (trigger.dataset.targetView) state.view = trigger.dataset.targetView;
+    render();
+    return;
+  }
+  if (action === "recalc-item") {
+    recalcItemFromPurchase();
+    return;
+  }
+  if (action === "save-item") {
+    const item = state.items.find((record) => record.id === trigger.dataset.itemId);
+    if (item) saveItem(item);
+  }
+}
+
+function bindDynamicControls() {
+  ["itemCostOz", "itemCostGram", "itemCostUnit", "itemPurchasePrice", "itemPurchaseQty", "itemPurchaseUnit"].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.addEventListener("input", updateImpactPreview);
+  });
+}
+
 function bindEvents() {
   els.loginBtn.addEventListener("click", login);
   els.logoutBtn.addEventListener("click", logout);
@@ -903,20 +1466,14 @@ function bindEvents() {
   });
   els.globalSearch.addEventListener("input", () => {
     state.query = els.globalSearch.value.trim();
-    renderRecordList();
-  });
-  els.showItemsBtn.addEventListener("click", () => {
-    state.view = "items";
-    state.activeCategory = "";
     render();
   });
-  els.showFormulasBtn.addEventListener("click", () => {
-    state.view = "formulas";
-    state.activeCategory = "";
-    render();
+  els.moduleTabs.forEach((tab) => {
+    tab.addEventListener("click", () => setView(tab.dataset.view));
   });
   els.workbookFile.addEventListener("change", handleWorkbookFile);
   els.exportJsonBtn.addEventListener("click", exportJson);
+  els.workspace.addEventListener("click", handleWorkspaceClick);
   els.modalCloseBtn.addEventListener("click", closeModal);
   els.modalOverlay.addEventListener("click", (event) => {
     if (event.target === els.modalOverlay) closeModal();
