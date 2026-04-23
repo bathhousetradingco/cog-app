@@ -7,8 +7,8 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23172f2a'/%3E%3Ctext x='50' y='62' text-anchor='middle' font-size='42' font-family='Arial' fill='%23f6d66f'%3EBT%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-<script src="assets/config.js?v=20260423-1"></script>
-<link rel="stylesheet" href="assets/app.css?v=20260423-1">
+<script src="assets/config.js?v=20260423-2"></script>
+<link rel="stylesheet" href="assets/app.css?v=20260423-2">
 </head>
 
 <body>
@@ -18,7 +18,21 @@
       <div class="kicker">Bathhouse Trading Company</div>
       <h1>COGS Workspace</h1>
     </div>
-    <div id="sessionBadge" class="sessionBadge">Not connected</div>
+    <div class="headerActions">
+      <div class="quickSearch">
+        <button id="quickSearchToggle" class="iconBtn" type="button" aria-label="Search">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6"></circle>
+            <path d="m16 16 4 4"></path>
+          </svg>
+        </button>
+        <div id="quickSearchPanel" class="quickSearchPanel" style="display:none;">
+          <input id="quickSearchInput" type="search" placeholder="Search cost items or formulas..." autocomplete="off">
+          <div id="quickSearchResults" class="quickSearchResults"></div>
+        </div>
+      </div>
+      <div id="sessionBadge" class="sessionBadge">Not connected</div>
+    </div>
   </header>
 
   <section id="setupPanel" class="panel setupPanel" style="display:none;">
@@ -37,21 +51,6 @@
   </section>
 
   <section id="app" style="display:none;">
-    <div class="toolbar">
-      <div class="searchWrap">
-        <label for="globalSearch">Search workbook</label>
-        <input type="search" id="globalSearch" placeholder="Search shea, jar, bath bomb, lip balm...">
-      </div>
-      <div class="toolbarActions">
-        <label class="fileBtn">
-          Import Excel
-          <input type="file" id="workbookFile" accept=".xlsx,.xls" hidden>
-        </label>
-        <button id="exportJsonBtn" class="darkBtn" type="button">Export JSON</button>
-        <button id="logoutBtn" class="mutedBtn" type="button">Logout</button>
-      </div>
-    </div>
-
     <div id="importStatus" class="statusBanner" style="display:none;"></div>
     <section id="workspace" class="workspace"></section>
   </section>
@@ -67,6 +66,6 @@
   </div>
 </div>
 
-<script src="assets/app.js?v=20260423-1"></script>
+<script src="assets/app.js?v=20260423-2"></script>
 </body>
 </html>

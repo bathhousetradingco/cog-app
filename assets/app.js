@@ -14,10 +14,10 @@ const els = {
   loginEmail: document.getElementById("loginEmail"),
   loginPassword: document.getElementById("loginPassword"),
   loginBtn: document.getElementById("loginBtn"),
-  logoutBtn: document.getElementById("logoutBtn"),
-  globalSearch: document.getElementById("globalSearch"),
-  workbookFile: document.getElementById("workbookFile"),
-  exportJsonBtn: document.getElementById("exportJsonBtn"),
+  quickSearchToggle: document.getElementById("quickSearchToggle"),
+  quickSearchPanel: document.getElementById("quickSearchPanel"),
+  quickSearchInput: document.getElementById("quickSearchInput"),
+  quickSearchResults: document.getElementById("quickSearchResults"),
   importStatus: document.getElementById("importStatus"),
   workspace: document.getElementById("workspace"),
   modalOverlay: document.getElementById("modalOverlay"),
@@ -69,7 +69,6 @@ const FORMULA_GROUPS = [
 const state = {
   user: null,
   view: "home",
-  query: "",
   activeKind: "",
   activeCategory: "",
   selectedItemId: "",
@@ -261,11 +260,6 @@ async function loadWorkspace() {
 }
 
 function render() {
-  if (state.query) {
-    renderSearchResults();
-    return;
-  }
-
   if (state.view === "home") renderHome();
   if (state.view === "itemCategories") renderCategoryPicker("items");
   if (state.view === "formulaCategories") renderCategoryPicker("formulas");
@@ -504,49 +498,78 @@ function renderFormulaDetail() {
   `;
 }
 
-function renderSearchResults() {
-  const query = state.query.toLowerCase();
-  const items = state.items.filter((item) => itemSearchText(item).toLowerCase().includes(query)).slice(0, 30);
-  const formulas = state.formulas.filter((formula) => formulaSearchText(formula).toLowerCase().includes(query)).slice(0, 30);
-  els.workspace.innerHTML = `
-    ${screenHeaderHtml({
-      eyebrow: "Search",
-      title: `Results for "${state.query}"`,
-      subtitle: `${items.length} cost items and ${formulas.length} formulas shown.`,
-      backAction: "clear-search",
-      backLabel: "Clear search"
-    })}
-    <section class="chooserGrid">
-      <div class="panel">
-        <div class="splitHeader">
-          <h3>Cost items</h3>
-          <span class="recordCount">${items.length}</span>
-        </div>
-        <div class="modalList">
-          ${items.map((item) => `
-            <button class="modalRow" type="button" data-action="select-item" data-item-id="${item.id}">
-              <span><strong>${escapeHtml(item.name)}</strong><span class="small">${escapeHtml(itemGroupName(item))}</span></span>
-              <span>${escapeHtml(bestCostLabel(item))}</span>
-            </button>
-          `).join("") || `<div class="emptyState">No cost items found.</div>`}
-        </div>
-      </div>
-      <div class="panel">
-        <div class="splitHeader">
-          <h3>Formulas</h3>
-          <span class="recordCount">${formulas.length}</span>
-        </div>
-        <div class="modalList">
-          ${formulas.map((formula) => `
-            <button class="modalRow" type="button" data-action="select-formula" data-formula-id="${formula.id}">
-              <span><strong>${escapeHtml(formula.name)}</strong><span class="small">${escapeHtml(formula.category || "")}</span></span>
-              <span>${money(evaluateFormula(formula))}</span>
-            </button>
-          `).join("") || `<div class="emptyState">No formulas found.</div>`}
-        </div>
-      </div>
-    </section>
-  `;
+function openQuickSearch() {
+  els.quickSearchPanel.style.display = "block";
+  els.quickSearchInput.focus();
+  els.quickSearchInput.select();
+  renderQuickSearchResults();
+}
+
+function closeQuickSearch() {
+  els.quickSearchPanel.style.display = "none";
+}
+
+function scoreSearchResult(name, haystack, query) {
+  const text = String(name || "").toLowerCase();
+  if (text === query) return 0;
+  if (text.startsWith(query)) return 1;
+  if (text.includes(query)) return 2;
+  if (haystack.includes(query)) return 3;
+  return 9;
+}
+
+function quickSearchMatches(query) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return [];
+
+  const itemMatches = state.items
+    .map((item) => ({
+      type: "Cost item",
+      action: "select-item",
+      idAttr: "data-item-id",
+      id: item.id,
+      title: item.name,
+      meta: itemGroupName(item),
+      value: bestCostLabel(item),
+      score: scoreSearchResult(item.name, itemSearchText(item).toLowerCase(), normalized)
+    }))
+    .filter((result) => result.score < 9);
+
+  const formulaMatches = state.formulas
+    .map((formula) => ({
+      type: "Formula",
+      action: "select-formula",
+      idAttr: "data-formula-id",
+      id: formula.id,
+      title: formula.name,
+      meta: formula.category || "Formula",
+      value: money(evaluateFormula(formula)),
+      score: scoreSearchResult(formula.name, formulaSearchText(formula).toLowerCase(), normalized)
+    }))
+    .filter((result) => result.score < 9);
+
+  return [...itemMatches, ...formulaMatches]
+    .sort((a, b) => a.score - b.score || a.title.localeCompare(b.title))
+    .slice(0, 10);
+}
+
+function renderQuickSearchResults() {
+  const query = els.quickSearchInput.value.trim();
+  if (!query) {
+    els.quickSearchResults.innerHTML = `<div class="small">Start typing to jump to a cost item or formula.</div>`;
+    return;
+  }
+
+  const matches = quickSearchMatches(query);
+  els.quickSearchResults.innerHTML = matches.map((result, index) => `
+    <button class="quickResult ${index === 0 ? "active" : ""}" type="button" data-action="${result.action}" ${result.idAttr}="${result.id}">
+      <span>
+        <strong>${escapeHtml(result.title)}</strong>
+        <span class="small">${escapeHtml(result.type)} - ${escapeHtml(result.meta)}</span>
+      </span>
+      <span class="small">${escapeHtml(result.value)}</span>
+    </button>
+  `).join("") || `<div class="small">No matching cost items or formulas.</div>`;
 }
 
 function formulaBreakdown(formula, overrides = {}) {
@@ -1130,17 +1153,11 @@ function handleActionClick(event) {
     state.view = "formulaList";
     render();
   }
-  if (action === "clear-search") {
-    state.query = "";
-    els.globalSearch.value = "";
-    render();
-  }
   if (action === "select-item") {
     const item = state.items.find((record) => record.id === trigger.dataset.itemId);
     if (!item) return;
     closeModal();
-    state.query = "";
-    els.globalSearch.value = "";
+    closeQuickSearch();
     state.selectedItemId = item.id;
     state.activeCategory = itemGroupName(item);
     state.activeKind = "items";
@@ -1151,8 +1168,7 @@ function handleActionClick(event) {
     const formula = state.formulas.find((record) => record.id === trigger.dataset.formulaId);
     if (!formula) return;
     closeModal();
-    state.query = "";
-    els.globalSearch.value = "";
+    closeQuickSearch();
     state.selectedFormulaId = formula.id;
     state.activeCategory = formula.category || "";
     state.activeKind = "formulas";
@@ -1183,21 +1199,33 @@ function bindDetailInputs() {
 
 function bindEvents() {
   els.loginBtn.addEventListener("click", login);
-  els.logoutBtn.addEventListener("click", logout);
   els.loginPassword.addEventListener("keydown", (event) => {
     if (event.key === "Enter") login();
   });
-  els.globalSearch.addEventListener("input", () => {
-    state.query = els.globalSearch.value.trim();
-    render();
+  els.quickSearchToggle.addEventListener("click", () => {
+    if (els.quickSearchPanel.style.display === "none") {
+      openQuickSearch();
+    } else {
+      closeQuickSearch();
+    }
   });
-  els.workbookFile.addEventListener("change", handleWorkbookFile);
-  els.exportJsonBtn.addEventListener("click", exportJson);
+  els.quickSearchInput.addEventListener("input", renderQuickSearchResults);
+  els.quickSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeQuickSearch();
+    if (event.key === "Enter") {
+      const firstResult = els.quickSearchResults.querySelector("[data-action]");
+      if (firstResult) firstResult.click();
+    }
+  });
+  els.quickSearchResults.addEventListener("click", handleActionClick);
   els.workspace.addEventListener("click", handleActionClick);
   els.modalContent.addEventListener("click", handleActionClick);
   els.modalCloseBtn.addEventListener("click", closeModal);
   els.modalOverlay.addEventListener("click", (event) => {
     if (event.target === els.modalOverlay) closeModal();
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".quickSearch")) closeQuickSearch();
   });
 }
 

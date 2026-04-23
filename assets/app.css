@@ -59,7 +59,6 @@ code {
 }
 
 .pageHeader,
-.toolbar,
 .modalHeader,
 .screenHeader,
 .splitHeader {
@@ -70,7 +69,8 @@ code {
 }
 
 .pageHeader {
-  margin: 8px 0 16px;
+  position: relative;
+  margin: 8px 0 18px;
 }
 
 .kicker,
@@ -92,7 +92,7 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: clamp(30px, 6vw, 54px);
+  font-size: clamp(30px, 5vw, 48px);
   line-height: 1;
 }
 
@@ -169,7 +169,6 @@ textarea {
 .primaryBtn,
 .darkBtn,
 .mutedBtn,
-.fileBtn,
 .dangerBtn,
 .smallBtn {
   display: inline-flex;
@@ -189,8 +188,7 @@ textarea {
   color: #fff;
 }
 
-.darkBtn,
-.fileBtn {
+.darkBtn {
   background: #111827;
   color: #fff;
 }
@@ -213,29 +211,78 @@ textarea {
   font-size: 13px;
 }
 
-.toolbar {
-  margin-bottom: 12px;
-  padding: 14px;
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quickSearch {
+  position: relative;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 999px;
   background: #fff;
+  color: var(--ink);
   box-shadow: var(--shadow);
 }
 
-.searchWrap {
-  flex: 1 1 360px;
+.iconBtn svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
 }
 
-.searchWrap label {
-  display: block;
-  margin-bottom: 6px;
+.quickSearchPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: min(420px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 18px 60px rgba(23, 32, 51, 0.18);
 }
 
-.toolbarActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+.quickSearchResults {
+  display: grid;
+  gap: 6px;
+  max-height: min(420px, calc(100vh - 170px));
+  margin-top: 8px;
+  overflow: auto;
+}
+
+.quickResult {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.quickResult:hover,
+.quickResult.active {
+  border-color: var(--border);
+  background: var(--panel-alt);
 }
 
 .statusBanner {
@@ -279,8 +326,8 @@ textarea {
 .choiceCard {
   display: grid;
   gap: 12px;
-  min-height: 220px;
-  padding: 18px;
+  min-height: 190px;
+  padding: 16px;
   text-align: left;
 }
 
@@ -293,7 +340,7 @@ textarea {
 }
 
 .choiceCard strong {
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1.05;
 }
 
@@ -305,14 +352,14 @@ textarea {
 
 .categoryGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
 .categoryCard {
   display: grid;
   gap: 6px;
-  min-height: 104px;
+  min-height: 94px;
   padding: 12px;
   color: var(--ink);
   text-align: left;
@@ -340,7 +387,7 @@ textarea {
 .recordCard {
   display: grid;
   gap: 7px;
-  min-height: 112px;
+  min-height: 104px;
   padding: 12px;
   color: var(--ink);
   text-align: left;
@@ -501,20 +548,31 @@ textarea {
 
 @media (max-width: 720px) {
   .pageHeader,
-  .toolbar,
   .modalHeader,
   .screenHeader {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .toolbarActions,
   .primaryBtn,
   .darkBtn,
   .mutedBtn,
-  .fileBtn,
   .dangerBtn {
     width: 100%;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .quickSearch {
+    order: 2;
+  }
+
+  .quickSearchPanel {
+    left: 0;
+    right: auto;
   }
 
   .chooserGrid,
